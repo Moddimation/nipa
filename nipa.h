@@ -17,6 +17,7 @@ void createnpa(int, char **, int);
 void extractnpa(int, int, char *);
 void parsedir(char*);
 void parsenpa(char *, int);
+void printnpa();
 
 typedef struct _npahead
 {

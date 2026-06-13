@@ -492,13 +492,13 @@ unsigned char keytbl[][0x100] = {
     0
 };
 
-enum { MODE_HELP, MODE_EXTRACT, MODE_CREATE };
+enum { MODE_HELP, MODE_EXTRACT, MODE_CREATE, MODE_VERIFY } mode;
 
 int main(int argc, char **argv)
 {
-    int i = 0, encryption = 0, mode = MODE_HELP;
+    int i = 0, encryption = 0;
 
-    printf("nipa\n\n");
+    puts("nipa\n");
 
     if (argc > 1 && strlen(argv[1]) > 1 && argv[1][i++] == '-')
     {
@@ -509,7 +509,7 @@ int main(int argc, char **argv)
             case 'x':
                 if (argc < 3)
                 {
-                    printf("Invalid arguments for -x\n");
+                    puts("Invalid arguments for -x");
                     return 1;
                 }
                 mode = MODE_EXTRACT;
@@ -519,7 +519,7 @@ int main(int argc, char **argv)
                 {
                     if (argc < 5)
                     {
-                        printf("Invalid arguments for -gc\n");
+                        puts("Invalid arguments for -gc");
                         return 1;
                     }
                 }
@@ -527,7 +527,7 @@ int main(int argc, char **argv)
                 {
                     if (argc < 4)
                     {
-                        printf("Invalid arguments for -c\n");
+                        puts("Invalid arguments for -c");
                         return 1;
                     }
                 }
@@ -544,7 +544,7 @@ int main(int argc, char **argv)
                 {
                     if (argc < 5)
                     {
-                        printf("Invalid arguments for -cg\n");
+                        puts("Invalid arguments for -cg");
                         return 1;
                     }
                 }
@@ -552,11 +552,19 @@ int main(int argc, char **argv)
                 {
                     if (argc < 4)
                     {
-                        printf("Invalid arguments for -g\n");
+                        puts("Invalid arguments for -g");
                         return 1;
                     }
                 }
                 encryption = 1;
+                break;
+            case 'v':
+                if (argc < 3)
+                {
+                    puts("Invalid arguments for -v");
+                    return 1;
+                }
+                mode = MODE_VERIFY;
                 break;
             default:
                 printf("Unknown argument '%c', ignoring.\n", argv[1][i-1]);
@@ -567,10 +575,11 @@ int main(int argc, char **argv)
 
     if (mode == MODE_HELP)
     {
-        printf(
+        puts(
             "usage:\n"
             "General\n"
             "\t-h - Help. Displays this information.\n\n"
+            "\t-v (file) - Verify mode. Prints NPA archive info without extracting\n"
             "Extraction\n"
             "\t-x (file) - Extract NPA archive\n"
             "\t-g (id) - Game ID for encryption (if applicable). Defaults to ChaosHead if no encryption is entered\n\n"
@@ -607,7 +616,7 @@ int main(int argc, char **argv)
             "Nitro+ ChiRAL - Lamento -Beyond the Void- Trial - LamentoTr *UNKNOWN*\n"
             "Nitro+ ChiRAL - sweet pool - sweetpool\n"
             "Nitro+ ChiRAL - Dramatical Murder - DramaticalMurder\n"
-            "Nitro+ ChiRAL - DRAMAtical Murder re:connect - DramaticalMurderRC\n"
+            "Nitro+ ChiRAL - DRAMAtical Murder re:connect - DramaticalMurderRC"
         );
         return 0;
     }
@@ -634,6 +643,14 @@ int main(int argc, char **argv)
     else if (mode == MODE_CREATE)
     {
         createnpa(argc-2, argv+2, encryption);
+    } else if (mode == MODE_EXTRACT)
+    {
+        parsenpa(argv[2], encryption);
+    }
+    else if (mode == MODE_VERIFY)
+    {
+        parsenpa(argv[2], encryption);
+        printnpa();
     }
 
     return 0;
@@ -714,7 +731,7 @@ void parsenpa(char *input, int encryption)
     int i = 0, x = 0;
 
     infile = fopen(input, "rb");
-    if (!infile)
+    if (infile == NULL)
     {
         printf("Could not open %s\n", input);
         exit(1);
@@ -724,17 +741,20 @@ void parsenpa(char *input, int encryption)
     input[i] = 0x00;
 
     /* Create a directory based on the input file's name then use it for output */
-    mkdir(input, 0755);
-    if (chdir(input) != 0)
+    if (mode != MODE_VERIFY)
     {
-        printf("Could not chdir to %s\n", input);
-        exit(1);
+        mkdir(input, 0755);
+        if (chdir(input) != 0)
+        {
+            printf("Could not chdir to %s\n", input);
+            exit(1);
+        }
     }
 
     fread(NPAHead.head, 1, 7, infile);
     if (strncmp("NPA\x01", NPAHead.head, 4) == 0)
     {
-        printf("Parsing NPA...\n");
+        puts("Parsing NPA...");
 
         fread(&NPAHead.key1,      1, 4, infile);
         fread(&NPAHead.key2,      1, 4, infile);
@@ -748,7 +768,7 @@ void parsenpa(char *input, int encryption)
 
         if (NPAHead.encrypt == 1 && encryption == 0)
         {
-            printf("This is an encrypted archive. Please read the help information and select an encryption.\n");
+            puts("This is an encrypted archive. Please read the help information and select an encryption.");
             exit(1);
         }
 
@@ -775,20 +795,36 @@ void parsenpa(char *input, int encryption)
             printf("%04d: %-50s 0x%08X [%08X]\n", i, NPAEntry[i].filename,
                    NPAEntry[i].offset, NPAEntry[i].compsize);
 
-            if (NPAEntry[i].type == 1)
-            {
-                mkdir(NPAEntry[i].filename, 0755);
-            }
-            else
-            {
-                extractnpa(i, ftell(infile), NPAEntry[i].filename);
+            if (mode != MODE_VERIFY) {
+                if (NPAEntry[i].type == 1)
+                {
+                    mkdir(NPAEntry[i].filename, 0755);
+                }
+                else
+                {
+                    extractnpa(i, ftell(infile), NPAEntry[i].filename);
+                }
             }
         }
     }
     else
     {
-        printf("Invalid NPA archive\n");
+        puts("Invalid NPA archive");
     }
+}
+
+void printnpa()
+{
+    puts("\n--- NPA Archive Info ---");
+    printf("Key1:         0x%08X\n", NPAHead.key1);
+    printf("Key2:         0x%08X\n", NPAHead.key2);
+    printf("Compressed:   %d\n",     NPAHead.compress);
+    printf("Encrypted:    %d\n",     NPAHead.encrypt);
+    printf("Game ID:      %d\n",     NPAHead.gameid);
+    printf("Total count:  %d\n",     NPAHead.totalcount);
+    printf("Folder count: %d\n",     NPAHead.foldercount);
+    printf("File count:   %d\n",     NPAHead.filecount);
+    printf("Data start:   0x%08X\n", NPAHead.start);
 }
 
 void extractnpa(int i, int pos, char *destination)
@@ -796,14 +832,14 @@ void extractnpa(int i, int pos, char *destination)
     unsigned char *buffer = (unsigned char*)calloc(NPAEntry[i].compsize, sizeof(char));
     FILE *out = NULL;
 
-    if (!buffer)
+    if (buffer == NULL)
     {
         printf("Could not allocate %d bytes of memory for buffer\n", NPAEntry[i].compsize);
         exit(1);
     }
 
     out = fopen(destination, "wb");
-    if (!out)
+    if (out == NULL)
     {
         printf("--WARNING: Cannot write file. %s\n", strerror(errno));
         free(buffer);
@@ -854,7 +890,7 @@ void extractnpa(int i, int pos, char *destination)
         if (uncompress((Bytef*)zbuffer, &origsize,
                        (const Bytef*)buffer, (uLong)NPAEntry[i].compsize) != Z_OK)
         {
-            printf("Uncompress failed!\n");
+            puts("Uncompress failed!");
             exit(1);
         }
         NPAEntry[i].origsize = (int)origsize;
@@ -884,7 +920,7 @@ void createnpa(int count, char **inarr, int encrypt)
     /* On Linux we use a POSIX glob-style path; parsedir handles the actual iteration */
     strcat(origpath, "/");
 
-    printf("Parsing directory structure, this could take a moment...\n");
+    puts("Parsing directory structure, this could take a moment...");
     parsedir(origpath);
 
     /* Prepare the struct */
@@ -904,7 +940,7 @@ void createnpa(int count, char **inarr, int encrypt)
     NPAEntry[0].offset = 0;
 
     outfile = fopen(inarr[1], "wb");
-    if (!outfile)
+    if (outfile == NULL)
     {
         printf("Could not open %s for writing\n", inarr[1]);
         exit(1);
@@ -1068,7 +1104,12 @@ void addentry(char *path, char *name, int eid, int type, int sd)
     const char *relativeDir;
     int relativePathSz;
 
-    NPAEntry = realloc(NPAEntry, (NPAHead.totalcount + 1) * 0x1c);
+    NPAEntry = realloc(NPAEntry, (NPAHead.totalcount + 1) * sizeof(*NPAEntry));
+    if (NPAEntry == NULL)
+    {
+        puts("Out of memory while growing NPA entry table");
+        exit(1);
+    }
     NPAEntry[NPAHead.totalcount].compsize = 0;
     NPAEntry[NPAHead.totalcount].origsize = 0;
 
@@ -1100,7 +1141,7 @@ void addentry(char *path, char *name, int eid, int type, int sd)
     if (NPAEntry[NPAHead.totalcount].type == 2)
     {
         tempf = fopen(temp2, "rb");
-        if (!tempf)
+        if (tempf == NULL)
         {
             printf("Could not open %s\n", temp2);
             exit(1);
@@ -1144,7 +1185,7 @@ void parsedir(char *path)
     }
 
     dirp = opendir(dirpath);
-    if (!dirp)
+    if (dirp == NULL)
     {
         printf("Could not open directory: %s\n", dirpath);
         return;
